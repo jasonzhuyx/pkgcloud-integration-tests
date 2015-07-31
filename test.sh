@@ -17,7 +17,6 @@
 #     https://github.com/pkgcloud/pkgcloud-integration-tests
 #     https://github.com/pkgcloud/pkgcloud
 ############################################################
-
 count=0
 countSuccess=0
 script_args=$@
@@ -46,7 +45,6 @@ buildTest() {
     echo `date +"%Y-%m-%d %H:%M:%S"` "Change to ${script_path}"
     cd "${script_path}"
   fi
-
   echo "PWD= $PWD"
 
   # clone repository for devex-tools environment
@@ -191,7 +189,7 @@ configArgsFromConfigFile() {
           fi
         done < ${file}
         if [[ "${readConfigKeyOkay}" == "true" ]]; then
-          echo `date +"%Y-%m-%d %H:%M:%S"` "Loaded $conf_key ..."
+          echo `date +"%Y-%m-%d %H:%M:%S"` "Loaded $conf_key"
           break
         fi
       fi
@@ -238,20 +236,19 @@ configArgsForTests() {
   newName="newTest"
   # flavor_id -
   #   100-105 standard.xsmall, .small, .medium, .large, .xlarge, .2xlarge
-  #   110 standard.4xlarge
-  #   114 standard.8xlarge
+  #   110,114 standard.4xlarge, standard.8xlarge
   #   203-205 highmem.large, .xlarge, .2xlarge
   flavorId=101
 
+  # get test args from a public cloud account
   parseOutput_ModuleTest_getFlavors "standard.xlarge"
+  parseOutput_ModuleTest_getNetworks
   parseOutput_ModuleTest_getServers
   parseOutput_ModuleTest_getImages
 
-  # default extra argument placeholders for the tests
   addKeyName=${keyName}
-  createImageId="128cfaa0-4736-408a-a5c2-df05a5d4a7d"
-  createNetworkId="a686df42-2d41-4dd4-8db7-af954bd89bfc"
-  createSecurityGroupId="bf7328a2-382b-4b98-a7da-fc78e2ebfd8c"
+  containerName="${newName}-container"
+  createNetworkId="${networkId}"
   createServerId="${serverId}"
 }
 
@@ -263,23 +260,18 @@ configDynamicArgsDict() {
   # ::: pre-defined arguments for the compute/ip tests ::: ====================
   # lib/compute/floating-ips/assignIp {serverId} {ip}
   args_assignIp="${createServerId} ${getIpsAvailableIp}"
-
   # lib/compute/floating-ips/deleteIp {ip}
   args_deleteIp="${addIpId}"
-
   # lib/compute/floating-ips/removeIp {serverId} {ip}
   args_removeIp="${createServerId} ${getIpsAvailableIp}"
 
   # ::: pre-defined arguments for the compute/keys tests ::: ====================
   # lib/compute/keys/addKey {keyName} {public_key}
   args_addKey="${newKeyName} ${public_keyfile}"
-
   # lib/compute/keys/deleteKey {keyName}
   args_deleteKey="${newKeyName}"
-
   # lib/compute/keys/destroyKey {keyName}
   args_destroyKey="${newKeyName}"
-
   # lib/compute/keys/getKey {keyName}
   args_getKey="${newKeyName}"
 
@@ -287,32 +279,23 @@ configDynamicArgsDict() {
   # lib/compute/createImage {newImageName} {serverId}
   local newImage="newImage${posKey}"
   args_createImage="${newImage} ${createServerId}"
-
   # lib/compute/createImage {newSecurityGroup} {description}
   args_createSecurityGroup="newSecurityGroup newSecurityGroupDescription"
-
   # lib/compute/createServer {name} {flavor} {image} {keyname} {networkId}
   local newServer="newServer${posKey}"
   args_createServer="${newServer} 104 ${imageId} ${addKeyName} ${createNetworkId}"
-
   # lib/compute/deleteImage {imageId}
   args_deleteImage="${createImageId}"
-
   # lib/compute/deleteSecurityGroup {securityGroupId}
   args_deleteSecurityGroup="${createSecurityGroupId}"
-
   # lib/compute/deleteServer {serverId}
   args_deleteServer="${createServerId}"
-
   # lib/compute/deleteImage {imageId}
   args_deleteServer="${createServerId}"
-
   # lib/compute/getImage {imageId}
   args_getImage="${createImageId}"
-
   # lib/compute/getSecurityGroup {securityGroupId}
   args_getSecurityGroup="${createSecurityGroupId}"
-
   # lib/compute/getServer {serverId}
   args_getServer="${createServerId}"
 
@@ -320,65 +303,50 @@ configDynamicArgsDict() {
   # lib/network/createNetwork {newNetworkName}
   local newNetwork="newNetwork${posKey}"
   args_createNetwork="${newNetwork}"
-
   # lib/network/createPort {networkId}
   args_createPort="${createNetworkId}"
-
   # lib/network/createSubnet {networkId} {cidr} {ip_version}
   args_createSubnet="${createNetworkId} 10.0.0.0/24 4"
-
   # lib/network/deleteNetwork {networkId}
   args_deleteNetwork="${createNetworkId}"
-
   # lib/network/deleteNetwork {portId}
   args_deletePort="${createPortId}"
-
   # lib/network/deleteSubnet {subnetId}
   args_deleteSubnet="${createSubnetId}"
-
   # lib/network/getNetwork {networkId}
   args_getNetwork="${createNetworkId}"
-
   # lib/network/getPort {portId}
   args_getPort="${createPortId}"
-
   # lib/network/getSubnet {subnetId}
   args_getSubnet="${createSubnetId}"
-
   # lib/network/updateNetwork {networkId} {updatedNetworkName}
   args_updateNetwork="${createNetworkId} updatedNetwork${posKey}"
-
   # lib/network/updatePort {portId} {updatedPortName}
   args_updatePort="${createPortId} updatedPort${posKey}"
-
   # lib/network/updateSubnet {subnetId} {updatedSubnetName}
   args_updateSubnet="${createSubnetId} updatedSubnet"
 
   # ::: pre-defined arguments for the storage tests ::: ====================
   # lib/storage/createContainer {newContainerName}
-  args_createContainer="${newName}"
-
+  args_createContainer="${containerName}"
   # lib/storage/deleteContainer {containerName}
-  args_deleteContainer="${newName}"
-
+  args_deleteContainer="${containerName}"
   # lib/storage/deleteContainerRobust {containerName}
-  args_deleteContainerRobust="${newName}"
-
+  args_deleteContainerRobust="${containerName}"
   # lib/storage/getContainer {containerName}
-  args_getContainer="${newName}"
-
+  args_getContainer="${containerName}"
   # lib/storage/getCountForContainer {containerName}
-  args_getCountForContainer="${newName}"
-
+  args_getCountForContainer="${containerName}"
   # lib/storage/getFile {containerName} {filename}
-  args_getFile="${newName} test${xtimes}.json"
-
+  args_getFile="${containerName} test${xtimes}.json"
   # lib/storage/getFiles {containerName}
-  args_getFiles="${newName}"
-
+  args_getFiles="${containerName}"
   # lib/storage/uploadFile {containerName} {newFileName} {source}
-  args_uploadFile="${newName} test${xtimes}.json ${config_filename}"
-
+  args_uploadFile="${containerName} test${xtimes}.json ${config_filename}"
+  # lib/storage/other/download-to-stdout {containerName} {remoteFileName}
+  args_download_to_stdout="${containerName} test.json"
+  # lib/storage/other/upload-end-write {containerName} {remoteFileName}
+  args_upload_end_write="${containerName} test.json"
 }
 
 # sleep for specific time (e.g. 10s, 5m)
@@ -391,12 +359,13 @@ delay() {
 # note: default arguments are ${provider} ${username} ${region} but some tests
 #       requires additional arguments after ${provider}
 getArgs() {
-  local xtimes=${2-1}
+  local module="${1//-/_}"
+  local xtimes="${2-1}"
 
   # build a global dynamic dictionary in order to get options for $1 test
   configDynamicArgsDict ${xtimes}
 
-  arg=args_$1
+  arg=args_$module
   options="${config_key} ${!arg} ${username} ${region}"
   result="${options/  / }"
   echo "${result}"
@@ -406,7 +375,8 @@ getArgs() {
 # get id for create* test if the test succeeded; otherwise
 # print output if the test failed (when $2 not specified)
 parseOutput() {
-  local count_$2=""
+  local module="${2//-/_}"
+  local count_${module}=""
   local parse_found="false"
   local IFS_SAVED=$IFS
   IFS='\n'
@@ -488,6 +458,10 @@ parseOutput() {
         hasDoneCreation_Server=false
         delay 10s
         break
+      elif [[ "$2" == "getCountForContainer" ]]; then
+        if [[ "${line}" =~ ( info.?:.+\'(\d+)\') ]]; then
+          echo "---- counts in container: ${BASH_REMATCH[2]}"
+        fi
       elif [[ "$2" == "getFlavors" ]]; then
         if [[ "${line}" =~ ( id:.+\'([0-9]{3})\') ]]; then
           count_getFlavors=$((${count_getFlavors}+1))
@@ -498,6 +472,7 @@ parseOutput() {
           if [[ "${line}" =~ (name:) ]] && \
              [[ "${line}" =~ (name:.+\'${flavorName}\') ]]; then
               echo "----- 1st matched flavor: ${activeFalvorId}"
+              parse_found="true"
           fi
         fi
       elif [[ "$2" == "getImages" ]]; then
@@ -532,6 +507,25 @@ parseOutput() {
               echo "------- 1st Available IP: ${BASH_REMATCH[2]}"
               getIpsAvailableIp="${BASH_REMATCH[2]}"
               parse_found="true"
+          fi
+        fi
+      elif [[ "$2" == "getNetworks" ]]; then
+        if [[ "${line}" =~ (name:.+\'(.+)\') ]]; then
+          count_getNetworks="$((${count_getNetworks}+1))"
+          if [[ "${parse_found}" != "true" ]]; then
+            activeNetworkName="${BASH_REMATCH[2]}"
+          fi
+        elif [[ "${parse_found}" != "true" ]] && \
+             [[ "${count_getNetworks}" != "" ]] && \
+             [[ "${activeNetworkName}" != "Ext-Net" ]]; then
+          if [[ "${line}" =~ ( id:.+\'([0-9a-z-]{36})\') ]]; then
+            activeNetworkId="${BASH_REMATCH[2]}"
+          elif [[ "${line}" =~ (status:) ]]; then
+            if [[ "${line}" =~ (status:.+\'ACTIVE\') ]]; then
+                echo "----- 1st Active Network: ${activeNetworkId} [${activeNetworkName}]"
+                parse_found="true"
+            fi
+            activeNetworkName=""
           fi
         fi
       elif [[ "$2" == "getPorts" ]]; then
@@ -595,7 +589,7 @@ parseOutput() {
   done <<< "$1"
   IFS=$IFS_SAVED
 
-  local count=count_$2
+  local count=count_${module}
   # run post-test jobs (checking error and dependencies)
   postTest "$1" "$2" "${!count}"
 }
@@ -638,6 +632,17 @@ parseOutput_ModuleTest_getImages() {
   echo ""
 }
 
+parseOutput_ModuleTest_getNetworks() {
+  echo `date +"%Y-%m-%d %H:%M:%S"` Getting active network ...
+  parseOutput_ModuleTest 'lib/network/getNetworks.js'
+
+  if [[ "${activeNetworkId}" != "" ]]; then
+    echo "--- Use 'active' network: ${activeNetworkId}"
+    networkId="${activeNetworkId}"
+  fi
+  echo ""
+}
+
 parseOutput_ModuleTest_getServers() {
   echo `date +"%Y-%m-%d %H:%M:%S"` Getting active server ...
   parseOutput_ModuleTest 'lib/compute/getServers.js'
@@ -674,6 +679,8 @@ postTest() {
     echo "----- all flavors counts: $3"
   elif [[ "$2" == "getImages" ]]; then
     echo "------ all images counts: $3"
+  elif [[ "$2" == "getNetworks" ]]; then
+    echo "---- all networks counts: $3"
   elif [[ "$2" == "getServers" ]]; then
     echo "----- all servers counts: $3"
   elif [[ "$2" == "getIps" ]]; then
@@ -914,11 +921,14 @@ runStorageModulesTests() {
   # ::: run storage tests :::
   runModuleTest "lib/storage/createContainer.js"
   runModuleTest "lib/storage/uploadFile.js" 11
+  runModuleTest "lib/storage/getCountForContainer.js"
   runModuleTest "lib/storage/deleteContainerRobust.js"
 
   local storageTests="
     createContainer
     uploadFile
+    other/upload-end-write
+    other/download-to-stdout
     getContainer
     getContainers
     getCountForContainer
@@ -944,7 +954,6 @@ runTests() {
   runComputeModulesTests
   # runComputeModulesAndIpsTests # (partial tests)
   runKeysModulesTests
-
   runNetworkModulesTests
   runStorageModulesTests
 
