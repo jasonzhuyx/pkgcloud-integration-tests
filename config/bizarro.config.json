@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "username": "admin",
+    "password": "665f8993e4579d4cfbc1a28e8e5b5405b8f30630",
+    "provider": "hp",
+    "strictSSL": false,
+    "useInternal": true,
+    "authUrl": "https://10.23.71.11:5000",
+    "region": "regionOne"
+  }
+}

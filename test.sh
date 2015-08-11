@@ -17,8 +17,7 @@
 #     https://github.com/pkgcloud/pkgcloud-integration-tests
 #     https://github.com/pkgcloud/pkgcloud
 ############################################################
-count=0
-countSuccess=0
+script_source=${BASH_SOURCE[0]}
 script_args=$@
 
 # build up test environment
@@ -26,70 +25,77 @@ buildTest() {
   echo ""
   echo `date +"%Y-%m-%d %H:%M:%S"` "(1). Build test environment"
   echo "============================================================"
+  count=0
+  countSuccess=0
   # get number of colors of the console
   colors_tput=`tput colors`
   # get full path to this script itself
-  script_file="${BASH_SOURCE[0]##*/}"
-  script_path="$( cd "$( echo "${BASH_SOURCE[0]%/*}" )" && pwd )"
+  script_file="${script_source##*/}"
+  script_path="$( cd "$( echo "${script_source%/*}" )" && pwd )"
+  # get runtime path info
   pkg_test="pkgcloud-integration-tests"
-  devex=`[[ "$(dirname ${script_path})" =~ (devex-tools/aft) ]] && echo "true"`
-
+  devex=`[[ "${script_path}" =~ (devex-tools/aft) ]] && echo "true"`
+  nodejs=`which nodejs || echo node`
   # pkgcloud and test repositories
   repo_pkgcloud="https://github.com/pkgcloud/pkgcloud.git"
   repo_pkgcloud_fork="https://github.com/jasonzhuyx/pkgcloud.git"
   repo_pkgcloud_test="https://github.com/pkgcloud/${pkg_test}.git"
   repo_pkgcloud_test_fork="https://github.com/jasonzhuyx/${pkg_test}.git"
 
+  # list npm config and environment settings
+  echo "${nodejs##*/} version= `${nodejs} --version` - `which ${nodejs##*/}`"
+  echo -e "npm version= `npm --version` - `which npm`\n`npm config ls -l`"
+  echo "------------------------------------------------------------"
+  (set -o posix; set)
+  echo "------------------------------------------------------------"
+
   if [[ "$PWD" != "${script_path}" ]]; then
     echo "PWD= $PWD"
-    echo `date +"%Y-%m-%d %H:%M:%S"` "Change to ${script_path}"
+    echo `date +"%Y-%m-%d %H:%M:%S"` "Change to ${script_path//$PWD/}"
     cd "${script_path}"
   fi
   echo "PWD= $PWD"
 
   # clone repository for devex-tools environment
-  if [[ "${devex}" != "" ]]; then
+  if [[ "${devex}" == "true" ]]; then
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Cleaning up test environment ..."
     rm -rf "pkgcloud"
     rm -rf "pkgcloud-integration-tests"
-
+    repo="${repo_pkgcloud_fork}"
     echo ""
-    echo `date +"%Y-%m-%d %H:%M:%S"` "Cloning pkgcloud repository ..."
+    echo `date +"%Y-%m-%d %H:%M:%S"` "Cloning pkgcloud - ${repo} ..."
     echo "------------------------------------------------------------"
-    git clone "${repo_pkgcloud_fork}"
-    echo ""
-    echo `date +"%Y-%m-%d %H:%M:%S"` "Cloning test repository ..."
-    echo "------------------------------------------------------------"
-    git clone "${repo_pkgcloud_test_fork}"
+    git clone "${repo}"
 
-    # 2. create npm link and change to the test folder
-    #    cd pkgcloud
-    #		 npm link
-    #    cd ../pkgcloud-integration-tests
-    #		 npm install
-    #		 npm link pkgcloud
-    #		 pwd
+    repo_test="${repo_pkgcloud_test_fork}"
+    echo ""
+    echo `date +"%Y-%m-%d %H:%M:%S"` "Cloning test repository - ${repo_test} ..."
+    echo "------------------------------------------------------------"
+    git clone "${repo_test}"
+
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Installing pkgcloud and tests ..."
     echo "------------------------------------------------------------"
+    find . -type d -exec chmod u+w {} +
     rm -rf "${script_path}/npm"
     mkdir -p "${script_path}/npm/bin"
-    export prefix=${script_path}/npm
+    echo "prefix=${script_path}/npm" >> ~/.npmrc
     export PATH=${script_path}/npm/bin:$PATH
+    echo "PATH=$PATH"
   fi
 
-  # build pkgcloud test environment
+  # build test environment - create npm link and change to the test folder
   if [[ -e "pkgcloud" ]] && [[ -e "${pkg_test}" ]] ; then
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Creating npm link ..."
     echo "------------------------------------------------------------"
-    cd pkgcloud
-    npm link
+    cd pkgcloud && npm link
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Change to ${pkg_test}"
     echo "------------------------------------------------------------"
     cd "../${pkg_test}"
+    git checkout test && echo ""
     npm install
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Link to pkgcloud ..."
@@ -100,14 +106,11 @@ buildTest() {
     echo "PWD= $PWD"
     cd "${pkg_test}"
   fi
-
   echo ""
   if [[ "$(basename $PWD)" == "${pkg_test}" ]]; then
     configArgs ${script_args}
   else
-    echo "PWD= $PWD"
-    echo "Abort: Cannot find ${pkg_test}"
-    echo ""
+    echo "Abort: Cannot find ${pkg_test} in PWD= $PWD"
     exit 1
   fi
 }
@@ -115,33 +118,37 @@ buildTest() {
 # initialize global configuration and settings (only run once for all tests)
 configArgs() {
   provider=hp
+  default_username="Platform-AddIn-QA"
+  default_password="Helion123!"
+  default_auth_url="https://region-a.geo-1.identity.hpcloudsvc.com:35357/"
+  openstack_use_internal="false"
+  openstack_strict_ssl="true"
   echo ""
   echo `date +"%Y-%m-%d %H:%M:%S"` "(2). Start configuration"
   echo "============================================================"
   echo "PWD= $PWD"
+  OS_USERNAME="${OS_USERNAME:=$default_username}"
+  OS_PASSWORD="${OS_PASSWORD:=$default_password}"
+  OS_AUTH_URL="${OS_AUTH_URL:=$default_auth_url}"
 
-  if [[ "${OS_USERNAME}" == "" ]]; then
-    OS_USERNAME="Platform-AddIn-QA"
-  fi
-  if [[ "${OS_PASSWORD}" == "" ]]; then
-    OS_PASSWORD="Helion123!"
-  fi
-  if [[ "${OS_AUTH_URL}" == "" ]]; then
-    OS_AUTH_URL="https://region-a.geo-1.identity.hpcloudsvc.com:35357/"
-  fi
   if [[ "${OS_AUTH_URL}" =~ (https://(region.+)\.identity\.hpcloudsvc\.com) ]]; then
     OS_REGION=${BASH_REMATCH[2]}
+  elif [[ "${OS_AUTH_URL}" =~ (https://(([0-9]+\.){3}[0-9]+\:[0-9]+)) ]]; then
+    OS_AUTH_URL="https://${BASH_REMATCH[2]}"
+    OS_REGION="regionOne"
+    openstack_use_internal="true"
+    openstack_strict_ssl="false"
+    configProxy "off"
   elif [[ "${OS_REGION}" == "" ]]; then
     OS_REGION="region-a.geo-1"
   fi
 
   # settings for public cloud account
-  config_key="${provider}"
+  auth_url="${OS_AUTH_URL}"
   username="${OS_USERNAME}"
   password="${OS_PASSWORD}"
-  auth_url="${OS_AUTH_URL}"
   region="${OS_REGION}"
-
+  config_key="${provider}"
   config_path="$PWD/config"
   config_filename="${config_path}/${config_key}.config.json"
   public_keyfile=`ls ~/.ssh/id_rsa.pub`
@@ -151,7 +158,6 @@ configArgs() {
 
   # configure test args against public cloud account
   configArgsForTests
-
   echo "------------------------------------------------------------"
   echo ""
 }
@@ -207,6 +213,8 @@ configArgsFromConfigFile() {
     "username": "${username}",
     "password": "${password}",
     "provider": "${provider}",
+    "strictSSL": ${openstack_strict_ssl},
+    "useInternal": ${openstack_use_internal},
     "authUrl": "${auth_url}",
     "region": "${region}"
   }
@@ -231,9 +239,9 @@ configArgsFromConfigFile() {
 configArgsForTests() {
   echo `date +"%Y-%m-%d %H:%M:%S"` Configuring tests args ...
 
-  keyName="hpcloud"
-  newKeyName="newKeyName"
-  newName="newTest"
+  preTestKey=`date +"%Y%m%d_%H%M%S"`"r$((RANDOM%10))"
+  newKeyName="newKey-${preTestKey}"
+  newName="newTest-${preTestKey}"
   # flavor_id -
   #   100-105 standard.xsmall, .small, .medium, .large, .xlarge, .2xlarge
   #   110,114 standard.4xlarge, standard.8xlarge
@@ -241,15 +249,13 @@ configArgsForTests() {
   flavorId=101
 
   # get test args from a public cloud account
-  parseOutput_ModuleTest_getFlavors "standard.xlarge"
+  parseOutput_ModuleTest_getFlavors "xlarge"
   parseOutput_ModuleTest_getNetworks
   parseOutput_ModuleTest_getServers
   parseOutput_ModuleTest_getImages
 
-  addKeyName=${keyName}
   containerName="${newName}-container"
-  createNetworkId="${networkId}"
-  createServerId="${serverId}"
+  addKeyName="${newKeyName}"
 }
 
 # build a dynamic mapping dictionary of args to modules (for getArgs func)
@@ -277,13 +283,13 @@ configDynamicArgsDict() {
 
   # ::: pre-defined arguments for the compute tests ::: ====================
   # lib/compute/createImage {newImageName} {serverId}
-  local newImage="newImage${posKey}"
+  local newImage="newImage-${preTestKey}-${posKey}"
   args_createImage="${newImage} ${createServerId}"
   # lib/compute/createImage {newSecurityGroup} {description}
-  args_createSecurityGroup="newSecurityGroup newSecurityGroupDescription"
+  args_createSecurityGroup="newSG-${preTestKey} newSecurityGroupDescription-${preTestKey}"
   # lib/compute/createServer {name} {flavor} {image} {keyname} {networkId}
-  local newServer="newServer${posKey}"
-  args_createServer="${newServer} 104 ${imageId} ${addKeyName} ${createNetworkId}"
+  local newServer="newServer-${preTestKey}-${posKey}"
+  args_createServer="${newServer} ${flavorId} ${imageId} ${addKeyName} ${createNetworkId}"
   # lib/compute/deleteImage {imageId}
   args_deleteImage="${createImageId}"
   # lib/compute/deleteSecurityGroup {securityGroupId}
@@ -301,7 +307,7 @@ configDynamicArgsDict() {
 
   # ::: pre-defined arguments for the network tests ::: ====================
   # lib/network/createNetwork {newNetworkName}
-  local newNetwork="newNetwork${posKey}"
+  local newNetwork="newNetwork-${preTestKey}-${posKey}"
   args_createNetwork="${newNetwork}"
   # lib/network/createPort {networkId}
   args_createPort="${createNetworkId}"
@@ -320,11 +326,11 @@ configDynamicArgsDict() {
   # lib/network/getSubnet {subnetId}
   args_getSubnet="${createSubnetId}"
   # lib/network/updateNetwork {networkId} {updatedNetworkName}
-  args_updateNetwork="${createNetworkId} updatedNetwork${posKey}"
+  args_updateNetwork="${createNetworkId} updatedNetwork-${preTestKey}-${posKey}"
   # lib/network/updatePort {portId} {updatedPortName}
-  args_updatePort="${createPortId} updatedPort${posKey}"
+  args_updatePort="${createPortId} updatedPort-${preTestKey}-${posKey}"
   # lib/network/updateSubnet {subnetId} {updatedSubnetName}
-  args_updateSubnet="${createSubnetId} updatedSubnet"
+  args_updateSubnet="${createSubnetId} updatedSubnet-${preTestKey}-${posKey}"
 
   # ::: pre-defined arguments for the storage tests ::: ====================
   # lib/storage/createContainer {newContainerName}
@@ -349,8 +355,28 @@ configDynamicArgsDict() {
   args_upload_end_write="${containerName} test.json"
 }
 
+# enable/disable proxy settings
+configProxy() {
+  if [[ "$1" =~ (on) ]] || [[ "$1" =~ (enabled) ]]; then
+    if [[ "${HTTP_PROXY:=$http_proxy}" == "" ]]; then
+      echo `date +"%Y-%m-%d %H:%M:%S"` "Restoring proxy settings ..."
+      export http_proxy="${env_http_proxy}"
+      export https_proxy="${env_http_sproxy}"
+    fi
+  elif [[ "${HTTP_PROXY:=$http_proxy}" != "" ]]; then
+      echo `date +"%Y-%m-%d %H:%M:%S"` "Disabling proxy settings ..."
+      env_http_proxy="${HTTP_PROXY:=$http_proxy}"
+      env_https_proxy="${HTTPS_PROXY:=$https_proxy}"
+      export http_proxy=""
+      export HTTP_PROXY=""
+      export https_proxy=""
+      export HTTPS_PROXY=""
+  fi
+}
+
 # sleep for specific time (e.g. 10s, 5m)
 delay() {
+  #for i in {1..60}; do echo -n .; done; # printf '.=%.0s' {1..60}
   echo `date +"%Y-%m-%d %H:%M:%S"` "Sleeping ${1-1s} ..."
   sleep ${1-1s}
 }
@@ -463,15 +489,15 @@ parseOutput() {
           echo "---- counts in container: ${BASH_REMATCH[2]}"
         fi
       elif [[ "$2" == "getFlavors" ]]; then
-        if [[ "${line}" =~ ( id:.+\'([0-9]{3})\') ]]; then
+        if [[ "${line}" =~ ( id:.+\'([0-9]+)\') ]]; then
           count_getFlavors=$((${count_getFlavors}+1))
           if [[ "${parse_found}" != "true" ]]; then
-            activeFalvorId="${BASH_REMATCH[2]}"
+            activeFlavorId="${BASH_REMATCH[2]}"
           fi
-        elif [[ "${count_getFlavors}" != "" ]]; then
+        elif [[ "${count_getFlavors}" != "" ]] && [[ "${parse_found}" != "true" ]]; then
           if [[ "${line}" =~ (name:) ]] && \
-             [[ "${line}" =~ (name:.+\'${flavorName}\') ]]; then
-              echo "----- 1st matched flavor: ${activeFalvorId}"
+             [[ "${line}" =~ (name:.+\'.*\.${flavorName}\') ]]; then
+              echo "----- 1st matched flavor: ${activeFlavorId}"
               parse_found="true"
           fi
         fi
@@ -600,8 +626,8 @@ parseOutput_ModuleTest() {
   local filename=$(basename "${filepath}")
   local module_name="${filename%.*}"
   local args="$(getArgs ${module_name} $i)"
-  echo "=== cmd: node ${filepath} ${args}"
-  local output=$(node ${filepath} ${args} 2>&1)
+  echo "=== cmd: ${nodejs} ${filepath} ${args}"
+  local output=$(${nodejs} ${filepath} ${args} 2>&1)
 
   if [[ "$?" -eq "0" ]]; then
     parseOutput "${output}" ${module_name}
@@ -611,12 +637,12 @@ parseOutput_ModuleTest() {
 parseOutput_ModuleTest_getFlavors() {
   flavorName=${1-standard.xlarge}
   echo `date +"%Y-%m-%d %H:%M:%S"` Getting \'${flavorName}\' flavor ...
-  activeFalvorId=""
+  activeFlavorId=""
   parseOutput_ModuleTest 'lib/compute/getFlavors.js'
 
-  if [[ "${activeFalvorId}" != "" ]]; then
-    echo "----- Use matched flavor: ${activeFalvorId}"
-    flavorId="${activeFalvorId}"
+  if [[ "${activeFlavorId}" != "" ]]; then
+    echo "----- Use matched flavor: ${activeFlavorId}"
+    flavorId="${activeFlavorId}"
   fi
   echo ""
 }
@@ -660,6 +686,8 @@ postTest() {
   shopt -s nocasematch
   local hasError=`[[ "$1" =~ (error|not found) ]] && echo true`
   local asPassed=`[[ "$2" != "" ]] && echo true`
+  local IFS_SAVE=$IFS
+  IFS='\n'
   if [[ "$asPassed" == "true" ]] && [[ "$hasError" == "true" ]]; then
     if [[ ! "$2" =~ (getServers) ]]; then
       while read -r line; do
@@ -667,6 +695,7 @@ postTest() {
       done <<< "$1"
     fi
   fi
+  IFS=$IFS_SAVE
 
   # post-test checking dependencies for next test(s)
   if [[ "$2" == "createServer" ]]; then
@@ -771,8 +800,8 @@ runModuleTest() {
     count=$((count+1))
     echo `date +"%Y-%m-%d %H:%M:%S"` Start testing ${module_name} x $i ...
     local args="$(getArgs ${module_name} $i)"
-    echo "=== cmd: node ${filepath} ${args}"
-    local output=$(node ${filepath} ${args} 2>&1)
+    echo "=== cmd: ${nodejs} ${filepath} ${args}"
+    local output=$(${nodejs} ${filepath} ${args} 2>&1)
 
     shopt -s nocasematch
     if [[ "$?" -ne "0" ]]; then
@@ -842,7 +871,6 @@ runComputeModulesTests() {
   fi
 
   runModuleTest "lib/compute/keys/destroyKey.js"
-
   runModuleTest "lib/network/deleteSubnet.js"
   runModuleTest "lib/network/deleteNetwork.js"
 }
@@ -851,7 +879,6 @@ runComputeModulesTests() {
 runComputeModulesAndIpsTests() {
   # ::: run compute modules tests :::
   runModuleTest "lib/network/createNetwork.js"
-
   for service in compute providers/hp/compute; do
     for action in create update get delete; do
       for filepath in lib/${service}/${action}*.js; do
@@ -861,11 +888,8 @@ runComputeModulesAndIpsTests() {
       done;
     done;
   done;
-
   runModuleTest "lib/compute/floating-ips/deleteIp.js"
-
   # runNetworkModulesTests
-
   runModuleTest "lib/network/deleteNetwork.js"
 }
 
@@ -950,12 +974,11 @@ runTests() {
   echo ""
   echo `date +"%Y-%m-%d %H:%M:%S"` "(3). Run customized tests"
   echo "============================================================"
-  # runModuleTest 'lib/compute/floating-ips/getIps.js'
-  runComputeModulesTests
-  # runComputeModulesAndIpsTests # (partial tests)
-  runKeysModulesTests
-  runNetworkModulesTests
-  runStorageModulesTests
+  runModuleTest "lib/compute/floating-ips/getIps.js"
+  # runComputeModulesTests
+  # runKeysModulesTests
+  # runNetworkModulesTests
+  # runStorageModulesTests
 
   echo "Passed: ${countSuccess} / ${count}"
 }
