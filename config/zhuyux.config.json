@@ -1,9 +1,0 @@
-{
-  "zhuyux": {
-    "username": "zhuyux",
-    "password": "HPHelion2015",
-    "provider": "hp",
-    "authUrl": "https://region-a.geo-1.identity.hpcloudsvc.com:35357/",
-    "region": "region-a.geo-1"
-  }
-}

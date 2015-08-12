@@ -1,9 +1,0 @@
-{
-  "Platform-AddIn-QA": {
-    "username": "Platform-AddIn-QA",
-    "password": "Helion123!",
-    "provider": "hp",
-    "authUrl": "https://region-a.geo-1.identity.hpcloudsvc.com:35357/",
-    "region": "region-a.geo-1"
-  }
-}

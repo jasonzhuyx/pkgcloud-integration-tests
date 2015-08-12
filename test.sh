@@ -34,7 +34,6 @@ buildTest() {
   script_path="$( cd "$( echo "${script_source%/*}" )" && pwd )"
   # get runtime path info
   pkg_test="pkgcloud-integration-tests"
-  devex=`[[ "${script_path}" =~ (devex-tools/aft) ]] && echo "true"`
   nodejs=`which nodejs || echo node`
   # pkgcloud and test repositories
   repo_pkgcloud="https://github.com/pkgcloud/pkgcloud.git"
@@ -56,8 +55,11 @@ buildTest() {
   fi
   echo "PWD= $PWD"
 
+  local devex=`[[ "${script_source}" =~ (devex-tools/aft) ]] && echo "true"`
+  local devex_top=`[[ ! -d "pkgcloud" ]] && [[ ! -d "${pkg_test}" ]] && \
+     [[ "${PWD##*/}" != "${pkg_test}" ]] && echo "true"`
   # clone repository for devex-tools environment
-  if [[ "${devex}" == "true" ]]; then
+  if [[ "${devex}" == "true" ]] || [[ "${devex_top}" == "true" ]]; then
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Cleaning up test environment ..."
     rm -rf "pkgcloud"
@@ -86,7 +88,7 @@ buildTest() {
   fi
 
   # build test environment - create npm link and change to the test folder
-  if [[ -e "pkgcloud" ]] && [[ -e "${pkg_test}" ]] ; then
+  if [[ -d "pkgcloud" ]] && [[ -d "${pkg_test}" ]] ; then
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Creating npm link ..."
     echo "------------------------------------------------------------"
@@ -102,12 +104,12 @@ buildTest() {
     echo "------------------------------------------------------------"
     npm link pkgcloud
     echo ""
-  elif [[ "$(basename $PWD)" != "${pkg_test}" ]] && [[ -e "${pkg_test}" ]]; then
+  elif [[ "${PWD##*/}" != "${pkg_test}" ]] && [[ -d "${pkg_test}" ]]; then
     echo "PWD= $PWD"
     cd "${pkg_test}"
   fi
   echo ""
-  if [[ "$(basename $PWD)" == "${pkg_test}" ]]; then
+  if [[ "${PWD##*/}" == "${pkg_test}" ]]; then
     configArgs ${script_args}
   else
     echo "Abort: Cannot find ${pkg_test} in PWD= $PWD"
@@ -168,34 +170,41 @@ configArgsFromConfigFile() {
   if [[ "$1" != "" ]]; then
     echo `date +"%Y-%m-%d %H:%M:%S"` "Searching ${config_path}/$1* ..."
     for file in ${config_path}/$1*.config.json; do
-      local readConfigKeyOkay=""
       if [[ -e "${file}" ]]; then
         local filename=$(basename "${file}")
         local conf_key=${filename/.config.json/}
+        local conf_provider="" conf_auth_url="" conf_region=""
+        local conf_username="" conf_password=""
+        local readConfigUser=""
         echo `date +"%Y-%m-%d %H:%M:%S"` "Checking ${filename} ..."
         while read -r line; do
-          if [[ "${line}" =~ (\"$conf_key\":) ]]; then
+          if [[ "${readConfigUser}" == "" ]] && \
+            ([[ "${line}" =~ (\"$conf_key\":) ]] || \
+             [[ "${line}" =~ (\"(.+)\":.+{) ]]); then
             echo `date +"%Y-%m-%d %H:%M:%S"` "Loading $conf_key ..."
-            config_key="$conf_key"
-            config_filename="${config_path}/${config_key}.config.json"
-            readConfigKeyOkay=true
-          elif [[ "${readConfigKeyOkay}" == "true" ]]; then
-            if [[ "${line}" =~ (\"provider\"[ ]*:[ ]*\"(.+)\") ]]; then
-              echo "---- provider: ${BASH_REMATCH[2]}"
-              provider="${BASH_REMATCH[2]}"
-            fi
-            if [[ "${line}" =~ (\"username\"[ ]*:[ ]*\"(.+)\") ]]; then
-              echo "---- username: ${BASH_REMATCH[2]}"
-              username="${BASH_REMATCH[2]}"
-            fi
-            if [[ "${line}" =~ (\"region\"[ ]*:[ ]*\"(.+)\") ]]; then
-              echo "------ region: ${BASH_REMATCH[2]}"
-              region="${BASH_REMATCH[2]}"
-            fi
+            readConfigUser=true
+          elif [[ "${line}" =~ (\"username\"[ ]*:[ ]*\"(.+)\") ]]; then
+            echo "---- username: ${BASH_REMATCH[2]}"
+            conf_username="${BASH_REMATCH[2]}"
+          elif [[ "${line}" =~ (\"password\"[ ]*:[ ]*\"(.+)\") ]]; then
+            conf_password="${BASH_REMATCH[2]}"
+          elif [[ "${line}" =~ (\"provider\"[ ]*:[ ]*\"(.+)\") ]]; then
+            echo "---- provider: ${BASH_REMATCH[2]}"
+            conf_provider="${BASH_REMATCH[2]}"
+          elif [[ "${line}" =~ (\"region\"[ ]*:[ ]*\"(.+)\") ]]; then
+            echo "------ region: ${BASH_REMATCH[2]}"
+            conf_region="${BASH_REMATCH[2]}"
           fi
         done < ${file}
-        if [[ "${readConfigKeyOkay}" == "true" ]]; then
+        if [[ "${readConfigUser}" == "true" ]] &&
+           [[ "${conf_username}" != "" ]] && [[ "$conf_password" != "" ]] && \
+           [[ "${conf_provider}" != "" ]] && [[ "$conf_region" != "" ]]; then
           echo `date +"%Y-%m-%d %H:%M:%S"` "Loaded $conf_key"
+          config_key="${conf_key}"
+          config_filename="${config_path}/${conf_key}.config.json"
+          provider="${conf_provider}"
+          username="${conf_username}"
+          region="${conf_region}"
           break
         fi
       fi
@@ -283,8 +292,7 @@ configDynamicArgsDict() {
 
   # ::: pre-defined arguments for the compute tests ::: ====================
   # lib/compute/createImage {newImageName} {serverId}
-  local newImage="newImage-${preTestKey}-${posKey}"
-  args_createImage="${newImage} ${createServerId}"
+  args_createImage="newImage-${preTestKey}-${posKey} ${createServerId}"
   # lib/compute/createImage {newSecurityGroup} {description}
   args_createSecurityGroup="newSG-${preTestKey} newSecurityGroupDescription-${preTestKey}"
   # lib/compute/createServer {name} {flavor} {image} {keyname} {networkId}
@@ -307,8 +315,7 @@ configDynamicArgsDict() {
 
   # ::: pre-defined arguments for the network tests ::: ====================
   # lib/network/createNetwork {newNetworkName}
-  local newNetwork="newNetwork-${preTestKey}-${posKey}"
-  args_createNetwork="${newNetwork}"
+  args_createNetwork="newNetwork-${preTestKey}-${posKey}"
   # lib/network/createPort {networkId}
   args_createPort="${createNetworkId}"
   # lib/network/createSubnet {networkId} {cidr} {ip_version}
