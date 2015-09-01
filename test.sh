@@ -26,7 +26,8 @@ buildTest() {
   echo `date +"%Y-%m-%d %H:%M:%S"` "(1). Build test environment"
   echo "============================================================"
   count=0
-  countSuccess=0
+  count_failed=0
+  count_passed=0
   # get number of colors of the console
   colors_tput=`tput colors`
   # get full path to this script itself
@@ -56,10 +57,10 @@ buildTest() {
   echo "PWD= $PWD"
 
   local devex=`[[ "${script_source}" =~ (devex-tools/aft) ]] && echo "true"`
-  local devex_top=`[[ ! -d "pkgcloud" ]] && [[ ! -d "${pkg_test}" ]] && \
+  local clone=`[[ ! -d "pkgcloud" ]] && [[ ! -d "${pkg_test}" ]] && \
      [[ "${PWD##*/}" != "${pkg_test}" ]] && echo "true"`
   # clone repository for devex-tools environment
-  if [[ "${devex}" == "true" ]] || [[ "${devex_top}" == "true" ]]; then
+  if [[ "${devex}" == "true" ]] || [[ "${clone}" == "true" ]]; then
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Cleaning up test environment ..."
     rm -rf "pkgcloud"
@@ -92,7 +93,7 @@ buildTest() {
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Creating npm link ..."
     echo "------------------------------------------------------------"
-    cd pkgcloud && npm link
+    cd pkgcloud && npm link && make test
     echo ""
     echo `date +"%Y-%m-%d %H:%M:%S"` "Change to ${pkg_test}"
     echo "------------------------------------------------------------"
@@ -113,7 +114,7 @@ buildTest() {
     configArgs ${script_args}
   else
     echo "Abort: Cannot find ${pkg_test} in PWD= $PWD"
-    exit 1
+    exit -1
   fi
 }
 
@@ -251,10 +252,6 @@ configArgsForTests() {
   preTestKey=`date +"%Y%m%d_%H%M%S"`"r$((RANDOM%10))"
   newKeyName="newKey-${preTestKey}"
   newName="newTest-${preTestKey}"
-  # flavor_id -
-  #   100-105 standard.xsmall, .small, .medium, .large, .xlarge, .2xlarge
-  #   110,114 standard.4xlarge, standard.8xlarge
-  #   203-205 highmem.large, .xlarge, .2xlarge
   flavorId=101
 
   # get test args from a public cloud account
@@ -274,11 +271,11 @@ configDynamicArgsDict() {
 
   # ::: pre-defined arguments for the compute/ip tests ::: ====================
   # lib/compute/floating-ips/assignIp {serverId} {ip}
-  args_assignIp="${createServerId} ${getIpsAvailableIp}"
+  args_assignIp="${createServerId=0xDEADBEEF} ${getIpsAvailableIp}"
   # lib/compute/floating-ips/deleteIp {ip}
   args_deleteIp="${addIpId}"
   # lib/compute/floating-ips/removeIp {serverId} {ip}
-  args_removeIp="${createServerId} ${getIpsAvailableIp}"
+  args_removeIp="${createServerId=0xDEADBEEF} ${getIpsAvailableIp}"
 
   # ::: pre-defined arguments for the compute/keys tests ::: ====================
   # lib/compute/keys/addKey {keyName} {public_key}
@@ -297,47 +294,47 @@ configDynamicArgsDict() {
   args_createSecurityGroup="newSG-${preTestKey} newSecurityGroupDescription-${preTestKey}"
   # lib/compute/createServer {name} {flavor} {image} {keyname} {networkId}
   local newServer="newServer-${preTestKey}-${posKey}"
-  args_createServer="${newServer} ${flavorId} ${imageId} ${addKeyName} ${createNetworkId}"
+  args_createServer="${newServer} ${flavorId} ${imageId} ${addKeyName} ${createNetworkId:=$activeNetworkId}"
   # lib/compute/deleteImage {imageId}
-  args_deleteImage="${createImageId}"
+  args_deleteImage="${createImageId=0xDEADBEEF}"
   # lib/compute/deleteSecurityGroup {securityGroupId}
-  args_deleteSecurityGroup="${createSecurityGroupId}"
+  args_deleteSecurityGroup="${createSecurityGroupId=0xDEADBEEF}"
   # lib/compute/deleteServer {serverId}
-  args_deleteServer="${createServerId}"
+  args_deleteServer="${createServerId=0xDEADBEEF}"
   # lib/compute/deleteImage {imageId}
-  args_deleteServer="${createServerId}"
+  args_deleteServer="${createServerId=0xDEADBEEF}"
   # lib/compute/getImage {imageId}
-  args_getImage="${createImageId}"
+  args_getImage="${createImageId=0xDEADBEEF}"
   # lib/compute/getSecurityGroup {securityGroupId}
-  args_getSecurityGroup="${createSecurityGroupId}"
+  args_getSecurityGroup="${createSecurityGroupId=0xDEADBEEF}"
   # lib/compute/getServer {serverId}
-  args_getServer="${createServerId}"
+  args_getServer="${createServerId=0xDEADBEEF}"
 
   # ::: pre-defined arguments for the network tests ::: ====================
   # lib/network/createNetwork {newNetworkName}
   args_createNetwork="newNetwork-${preTestKey}-${posKey}"
   # lib/network/createPort {networkId}
-  args_createPort="${createNetworkId}"
+  args_createPort="${createNetworkId:=$activeNetworkId}"
   # lib/network/createSubnet {networkId} {cidr} {ip_version}
-  args_createSubnet="${createNetworkId} 10.0.0.0/24 4"
+  args_createSubnet="${createNetworkId:=$activeNetworkId} 10.0.0.0/24 4"
   # lib/network/deleteNetwork {networkId}
-  args_deleteNetwork="${createNetworkId}"
+  args_deleteNetwork="${createNetworkId=0xDEADBEEF}"
   # lib/network/deleteNetwork {portId}
-  args_deletePort="${createPortId}"
+  args_deletePort="${createPortId=0xDEADBEEF}"
   # lib/network/deleteSubnet {subnetId}
-  args_deleteSubnet="${createSubnetId}"
+  args_deleteSubnet="${createSubnetId=0xDEADBEEF}"
   # lib/network/getNetwork {networkId}
-  args_getNetwork="${createNetworkId}"
+  args_getNetwork="${createNetworkId:=$activeNetworkId}"
   # lib/network/getPort {portId}
-  args_getPort="${createPortId}"
+  args_getPort="${createPortId=0xDEADBEEF}"
   # lib/network/getSubnet {subnetId}
-  args_getSubnet="${createSubnetId}"
+  args_getSubnet="${createSubnetId=0xDEADBEEF}"
   # lib/network/updateNetwork {networkId} {updatedNetworkName}
-  args_updateNetwork="${createNetworkId} updatedNetwork-${preTestKey}-${posKey}"
+  args_updateNetwork="${createNetworkId:=$activeNetworkId} updatedNetwork-${preTestKey}-${posKey}"
   # lib/network/updatePort {portId} {updatedPortName}
-  args_updatePort="${createPortId} updatedPort-${preTestKey}-${posKey}"
+  args_updatePort="${createPortId=0xDEADBEEF} updatedPort-${preTestKey}-${posKey}"
   # lib/network/updateSubnet {subnetId} {updatedSubnetName}
-  args_updateSubnet="${createSubnetId} updatedSubnet-${preTestKey}-${posKey}"
+  args_updateSubnet="${createSubnetId=0xDEADBEEF} updatedSubnet-${preTestKey}-${posKey}"
 
   # ::: pre-defined arguments for the storage tests ::: ====================
   # lib/storage/createContainer {newContainerName}
@@ -671,7 +668,9 @@ parseOutput_ModuleTest_getNetworks() {
 
   if [[ "${activeNetworkId}" != "" ]]; then
     echo "--- Use 'active' network: ${activeNetworkId}"
-    networkId="${activeNetworkId}"
+  else
+    echo "**** No 'active' network."
+    activeNetworkId="0xDEADBEEF"
   fi
   echo ""
 }
@@ -776,21 +775,18 @@ printStatus() {
   local status=$1
   local module=$2
 
-  if [[ "${status}" == 'FAIL' ]]; then
-    if [[ "${colors_tput}" -ge "16" ]]; then
-      status="\033[31m${status}\033[0m"
+  if [[ "${colors_tput}" -ge "16" ]]; then
+    if [[ "${status}" == 'FAIL' ]]; then
+        status="\033[31m${status}\033[0m"
+    elif [[ ${status} == 'WARN' ]]; then
+        status="\033[33m${status}\033[0m"
+    elif [[ ${status} == 'SKIP' ]]; then
+        status="\033[35m${status}\033[0m"
+    else # Pass
+        status="\033[32m${status}\033[0m"
+        module="\033[34m${module}\033[0m"
     fi
-  elif [[ ${status} == 'WARN' ]]; then
-    if [[ "${colors_tput}" -ge "16" ]]; then
-      status="\033[33m${status}\033[0m"
-    fi
-  else # Pass
-    if [[ "${colors_tput}" -ge "16" ]]; then
-      status="\033[32m${status}\033[0m"
-      module="\033[34m${module}\033[0m"
-    fi
-  fi;
-
+  fi
   echo -e `date +"%Y-%m-%d %H:%M:%S"` ${status}: ${module}
 }
 
@@ -807,23 +803,29 @@ runModuleTest() {
     count=$((count+1))
     echo `date +"%Y-%m-%d %H:%M:%S"` Start testing ${module_name} x $i ...
     local args="$(getArgs ${module_name} $i)"
-    echo "=== cmd: ${nodejs} ${filepath} ${args}"
-    local output=$(${nodejs} ${filepath} ${args} 2>&1)
 
-    shopt -s nocasematch
-    if [[ "$?" -ne "0" ]]; then
-      printStatus "FAIL" ${filepath}
-      parseOutput "${output}"
-    elif [[ "${output}" =~ (name: \[32m\'Error\') ]] || \
-         [[ "${output}" =~ (throw er) ]] || \
-         [[ "${output}" =~ (error:) ]]; then
-      printStatus "WARN" ${filepath}
-      parseOutput "${output}"
+    if [[ "${args}" =~ (0xDEADBEEF) ]]; then
+      printf -- "%20s Skipping test ${module_name} x $i, arg: ${args}\n" " "
+      printStatus "SKIP" ${filepath}
     else
-      countSuccess=$((countSuccess+1))
-      parseOutput "${output}" ${module_name}
-      printStatus "PASS" ${filepath}
-    fi;
+      echo "=== cmd: ${nodejs} ${filepath} ${args}"
+      local output=$(${nodejs} ${filepath} ${args} 2>&1)
+      shopt -s nocasematch
+      if [[ "$?" -ne "0" ]]; then
+        count_failed=$((count_failed+1))
+        printStatus "FAIL" ${filepath}
+        parseOutput "${output}"
+      elif [[ "${output}" =~ (name: \[32m\'Error\') ]] || \
+           [[ "${output}" =~ (throw er) ]] || \
+           [[ "${output}" =~ (error:) ]]; then
+        printStatus "WARN" ${filepath}
+        parseOutput "${output}"
+      else
+        count_passed=$((count_passed+1))
+        parseOutput "${output}" ${module_name}
+        printStatus "PASS" ${filepath}
+      fi;
+    fi
     echo ""
     echo "............................................................"
     echo ""
@@ -982,12 +984,13 @@ runTests() {
   echo `date +"%Y-%m-%d %H:%M:%S"` "(3). Run customized tests"
   echo "============================================================"
   runModuleTest "lib/compute/floating-ips/getIps.js"
-  # runComputeModulesTests
-  # runKeysModulesTests
-  # runNetworkModulesTests
-  # runStorageModulesTests
+  runComputeModulesTests
+  runKeysModulesTests
+  runNetworkModulesTests
+  runStorageModulesTests
 
-  echo "Passed: ${countSuccess} / ${count}"
+  echo "Passed: ${count_passed}, Failed: ${count_failed}, Tested: ${count}"
+  exit ${count_failed}
 }
 
 # start running tests
